@@ -87,29 +87,46 @@
         <section class="charts-grid">
             <article class="card">
                 <h2>Afluencia por area destino</h2>
-                <div id="areaBars" class="bar-list"></div>
+                <div class="chart-canvas-wrap chart-canvas-wrap-tall">
+                    <canvas id="areaChartCanvas"></canvas>
+                </div>
             </article>
 
             <article class="card">
                 <h2>Distribucion de ingresos por hora</h2>
-                <div id="hourBars" class="hour-bars"></div>
+                <div class="chart-canvas-wrap chart-canvas-wrap-medium">
+                    <canvas id="hourChartCanvas"></canvas>
+                </div>
             </article>
         </section>
 
         <section class="charts-grid extra-analytics-grid">
             <article class="card">
-                <h2>Registros por dia</h2>
-                <div id="dayBars" class="bar-list"></div>
+                <div class="chart-card-head">
+                    <h2>Registros en el tiempo</h2>
+                    <div class="trend-switch" role="group" aria-label="Granularidad de tendencia">
+                        <button id="trendDayButton" class="button-soft trend-button is-active" type="button">Dia</button>
+                        <button id="trendWeekButton" class="button-soft trend-button" type="button">Semana</button>
+                        <button id="trendMonthButton" class="button-soft trend-button" type="button">Mes</button>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrap chart-canvas-wrap-medium">
+                    <canvas id="dayChartCanvas"></canvas>
+                </div>
             </article>
 
             <article class="card">
                 <h2>Estados de atencion</h2>
-                <div id="statusBars" class="bar-list"></div>
+                <div class="chart-canvas-wrap chart-canvas-wrap-medium">
+                    <canvas id="statusChartCanvas"></canvas>
+                </div>
             </article>
 
             <article class="card">
                 <h2>Rangos de estancia</h2>
-                <div id="stayBuckets" class="stay-buckets"></div>
+                <div class="chart-canvas-wrap chart-canvas-wrap-medium">
+                    <canvas id="stayChartCanvas"></canvas>
+                </div>
             </article>
         </section>
 
@@ -173,6 +190,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="script.js"></script>
 </body>
 

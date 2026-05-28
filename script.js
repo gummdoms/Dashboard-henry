@@ -9,6 +9,10 @@
     let inFlight = false;
     let cachedRecords = [];
     let filteredRecords = [];
+    const chartInstances = {};
+    const trendState = {
+        granularity: "day"
+    };
 
     const tableState = {
         page: 1,
@@ -56,11 +60,14 @@
         notAttendedSub: document.getElementById("notAttendedSub"),
         peakHour: document.getElementById("peakHour"),
         peakHourSub: document.getElementById("peakHourSub"),
-        areaBars: document.getElementById("areaBars"),
-        hourBars: document.getElementById("hourBars"),
-        dayBars: document.getElementById("dayBars"),
-        statusBars: document.getElementById("statusBars"),
-        stayBuckets: document.getElementById("stayBuckets"),
+        areaChartCanvas: document.getElementById("areaChartCanvas"),
+        hourChartCanvas: document.getElementById("hourChartCanvas"),
+        dayChartCanvas: document.getElementById("dayChartCanvas"),
+        statusChartCanvas: document.getElementById("statusChartCanvas"),
+        stayChartCanvas: document.getElementById("stayChartCanvas"),
+        trendDayButton: document.getElementById("trendDayButton"),
+        trendWeekButton: document.getElementById("trendWeekButton"),
+        trendMonthButton: document.getElementById("trendMonthButton"),
         tableMeta: document.getElementById("tableMeta"),
         recordsBody: document.getElementById("recordsBody"),
         tableSearchInput: document.getElementById("tableSearchInput"),
@@ -116,11 +123,55 @@
             }
         });
 
+        if (els.trendDayButton && els.trendWeekButton && els.trendMonthButton) {
+            els.trendDayButton.addEventListener("click", () => {
+                setTrendGranularity("day");
+            });
+
+            els.trendWeekButton.addEventListener("click", () => {
+                setTrendGranularity("week");
+            });
+
+            els.trendMonthButton.addEventListener("click", () => {
+                setTrendGranularity("month");
+            });
+        }
+
         tableState.pageSize = Number(els.pageSizeSelect.value) || DEFAULT_PAGE_SIZE;
         updateTablePagination(0, 0);
+        updateTrendToggleUi();
 
         restartAutoRefresh();
         loadAndRender("initial");
+    }
+
+    function setTrendGranularity(granularity) {
+        if (!["day", "week", "month"].includes(granularity)) {
+            return;
+        }
+
+        if (trendState.granularity === granularity) {
+            return;
+        }
+
+        trendState.granularity = granularity;
+        updateTrendToggleUi();
+        renderDailyChart(filteredRecords);
+    }
+
+    function updateTrendToggleUi() {
+        const buttonMap = [
+            { button: els.trendDayButton, value: "day" },
+            { button: els.trendWeekButton, value: "week" },
+            { button: els.trendMonthButton, value: "month" }
+        ];
+
+        buttonMap.forEach((item) => {
+            if (!item.button) {
+                return;
+            }
+            item.button.classList.toggle("is-active", trendState.granularity === item.value);
+        });
     }
 
     function restartAutoRefresh() {
@@ -706,45 +757,38 @@
             counts.set(area, (counts.get(area) || 0) + 1);
         }
 
-        const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-        els.areaBars.innerHTML = "";
+        const entries = Array.from(counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
 
-        if (!entries.length) {
-            els.areaBars.innerHTML = '<div class="empty-chart">Sin datos para construir la distribucion por area.</div>';
-            return;
-        }
-
-        const total = records.length;
-        entries.forEach((entry, index) => {
-            const area = entry[0];
-            const amount = entry[1];
-            const percent = total ? (amount / total) * 100 : 0;
-
-            const row = document.createElement("div");
-            row.className = "bar-row";
-
-            const label = document.createElement("span");
-            label.className = "bar-label";
-            label.textContent = area;
-
-            const track = document.createElement("div");
-            track.className = "bar-track";
-
-            const fill = document.createElement("div");
-            fill.className = "bar-fill";
-            fill.style.width = percent.toFixed(1) + "%";
-            fill.style.background = AREA_COLORS[index % AREA_COLORS.length];
-            track.appendChild(fill);
-
-            const value = document.createElement("span");
-            value.className = "bar-value";
-            value.textContent = numberFormatter.format(amount) + " | " + percentFormatter.format(percent) + "%";
-
-            row.appendChild(label);
-            row.appendChild(track);
-            row.appendChild(value);
-            els.areaBars.appendChild(row);
-        });
+        upsertChart(
+            "areaChart",
+            els.areaChartCanvas,
+            {
+                type: "bar",
+                data: {
+                    labels: entries.map((entry) => entry[0]),
+                    datasets: [
+                        {
+                            label: "Registros",
+                            data: entries.map((entry) => entry[1]),
+                            borderRadius: 7,
+                            backgroundColor: entries.map((_, idx) => AREA_COLORS[idx % AREA_COLORS.length]),
+                            borderColor: "rgba(10, 26, 40, 0.7)",
+                            borderWidth: 1.2
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: "y",
+                    plugins: {
+                        legend: { display: false },
+                        noDataText: "Sin datos para construir la distribucion por area."
+                    },
+                    scales: getCommonScales("cyan")
+                }
+            }
+        );
     }
 
     function renderHourChart(records) {
@@ -758,98 +802,147 @@
         }
 
         const entries = Array.from(hourMap.entries()).sort((a, b) => a[0] - b[0]);
-        els.hourBars.innerHTML = "";
 
-        if (!entries.length) {
-            els.hourBars.innerHTML = '<div class="empty-chart">Sin horas de ingreso validas para graficar.</div>';
-            return;
-        }
-
-        const maxValue = Math.max(...entries.map((entry) => entry[1]));
-
-        entries.forEach((entry) => {
-            const hour = entry[0];
-            const count = entry[1];
-
-            const col = document.createElement("div");
-            col.className = "hour-column";
-
-            const countEl = document.createElement("div");
-            countEl.className = "hour-count";
-            countEl.textContent = String(count);
-
-            const pillarWrap = document.createElement("div");
-            pillarWrap.className = "hour-pillar-wrap";
-
-            const pillar = document.createElement("div");
-            pillar.className = "hour-pillar";
-            const heightPx = Math.max(14, Math.round((count / maxValue) * 120));
-            pillar.style.height = heightPx + "px";
-            pillarWrap.appendChild(pillar);
-
-            const label = document.createElement("div");
-            label.className = "hour-label";
-            label.textContent = String(hour).padStart(2, "0") + ":00";
-
-            col.appendChild(countEl);
-            col.appendChild(pillarWrap);
-            col.appendChild(label);
-            els.hourBars.appendChild(col);
-        });
+        upsertChart(
+            "hourChart",
+            els.hourChartCanvas,
+            {
+                type: "bar",
+                data: {
+                    labels: entries.map((entry) => String(entry[0]).padStart(2, "0") + ":00"),
+                    datasets: [
+                        {
+                            label: "Ingresos",
+                            data: entries.map((entry) => entry[1]),
+                            borderRadius: 6,
+                            backgroundColor: "rgba(52, 170, 255, 0.72)",
+                            borderColor: "#69c4ff",
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        legend: { display: false },
+                        noDataText: "Sin horas de ingreso validas para graficar."
+                    },
+                    scales: getCommonScales("blue")
+                }
+            }
+        );
     }
 
     function renderDailyChart(records) {
-        const dateMap = new Map();
+        const entries = buildTrendEntries(records, trendState.granularity);
+
+        upsertChart(
+            "dayChart",
+            els.dayChartCanvas,
+            {
+                type: "line",
+                data: {
+                    labels: entries.map((entry) => entry[0]),
+                    datasets: [
+                        {
+                            label: "Registros por dia",
+                            data: entries.map((entry) => entry[1]),
+                            fill: true,
+                            tension: 0.35,
+                            borderWidth: 3,
+                            borderColor: "#71d2ff",
+                            backgroundColor: (ctx) => getLineAreaGradient(ctx),
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBorderWidth: 2,
+                            pointBorderColor: "#052b43",
+                            pointBackgroundColor: "#9de8ff"
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        legend: { display: false },
+                        noDataText: "Sin fechas validas para construir el trend diario."
+                    },
+                    scales: getCommonScales("teal")
+                }
+            }
+        );
+    }
+
+    function buildTrendEntries(records, granularity) {
+        const buckets = new Map();
+
         for (const record of records) {
-            const dateText = record.fechaRaw || "";
-            if (!dateText) {
+            const baseDate = getRecordDateOnly(record);
+            if (!baseDate) {
                 continue;
             }
 
-            dateMap.set(dateText, (dateMap.get(dateText) || 0) + 1);
+            let key = "";
+            let label = "";
+            let sortTime = 0;
+
+            if (granularity === "week") {
+                const monday = getWeekStart(baseDate);
+                key = toDateKey(monday);
+                label = "Sem " + getIsoWeekNumber(monday) + " - " + formatDateShort(monday);
+                sortTime = monday.getTime();
+            } else if (granularity === "month") {
+                const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+                key = toDateKey(monthStart);
+                label = monthStart.toLocaleDateString("es-CO", { month: "short", year: "numeric" });
+                sortTime = monthStart.getTime();
+            } else {
+                key = toDateKey(baseDate);
+                label = formatDateShort(baseDate);
+                sortTime = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
+            }
+
+            if (!buckets.has(key)) {
+                buckets.set(key, { label, value: 0, sortTime });
+            }
+
+            buckets.get(key).value += 1;
         }
 
-        const entries = Array.from(dateMap.entries()).sort((a, b) => compareDateStrings(a[0], b[0]));
-        els.dayBars.innerHTML = "";
+        return Array.from(buckets.values())
+            .sort((a, b) => a.sortTime - b.sortTime)
+            .map((item) => [item.label, item.value]);
+    }
 
-        if (!entries.length) {
-            els.dayBars.innerHTML = '<div class="empty-chart">Sin fechas validas para construir el trend diario.</div>';
-            return;
-        }
+    function getWeekStart(date) {
+        const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const day = normalized.getDay();
+        const offset = day === 0 ? -6 : 1 - day;
+        normalized.setDate(normalized.getDate() + offset);
+        return normalized;
+    }
 
-        const maxValue = Math.max(...entries.map((entry) => entry[1]));
-        const total = records.length || 1;
+    function getIsoWeekNumber(date) {
+        const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNumber = target.getUTCDay() || 7;
+        target.setUTCDate(target.getUTCDate() + 4 - dayNumber);
+        const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+        return Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+    }
 
-        entries.forEach((entry, index) => {
-            const dateText = entry[0];
-            const count = entry[1];
-            const percent = (count / total) * 100;
+    function toDateKey(date) {
+        return (
+            String(date.getFullYear()) +
+            "-" +
+            String(date.getMonth() + 1).padStart(2, "0") +
+            "-" +
+            String(date.getDate()).padStart(2, "0")
+        );
+    }
 
-            const row = document.createElement("div");
-            row.className = "bar-row";
-
-            const label = document.createElement("span");
-            label.className = "bar-label";
-            label.textContent = dateText;
-
-            const track = document.createElement("div");
-            track.className = "bar-track";
-
-            const fill = document.createElement("div");
-            fill.className = "bar-fill";
-            fill.style.width = ((count / maxValue) * 100).toFixed(1) + "%";
-            fill.style.background = AREA_COLORS[index % AREA_COLORS.length];
-            track.appendChild(fill);
-
-            const value = document.createElement("span");
-            value.className = "bar-value";
-            value.textContent = numberFormatter.format(count) + " | " + percentFormatter.format(percent) + "%";
-
-            row.appendChild(label);
-            row.appendChild(track);
-            row.appendChild(value);
-            els.dayBars.appendChild(row);
-        });
+    function formatDateShort(date) {
+        return (
+            String(date.getDate()).padStart(2, "0") +
+            "/" +
+            String(date.getMonth() + 1).padStart(2, "0")
+        );
     }
 
     function renderStatusChart(records) {
@@ -876,39 +969,41 @@
             { label: "OTRO", count: totals.otro, color: "#f6b35d" }
         ];
 
-        els.statusBars.innerHTML = "";
-        const total = records.length;
-        if (!total) {
-            els.statusBars.innerHTML = '<div class="empty-chart">Sin datos para segmentar estados.</div>';
-            return;
-        }
-
-        entries.forEach((entry) => {
-            const row = document.createElement("div");
-            row.className = "bar-row";
-
-            const label = document.createElement("span");
-            label.className = "bar-label";
-            label.textContent = entry.label;
-
-            const track = document.createElement("div");
-            track.className = "bar-track";
-
-            const fill = document.createElement("div");
-            fill.className = "bar-fill";
-            fill.style.width = ((entry.count / total) * 100).toFixed(1) + "%";
-            fill.style.background = entry.color;
-            track.appendChild(fill);
-
-            const value = document.createElement("span");
-            value.className = "bar-value";
-            value.textContent = numberFormatter.format(entry.count) + " | " + percentFormatter.format((entry.count / total) * 100) + "%";
-
-            row.appendChild(label);
-            row.appendChild(track);
-            row.appendChild(value);
-            els.statusBars.appendChild(row);
-        });
+        upsertChart(
+            "statusChart",
+            els.statusChartCanvas,
+            {
+                type: "doughnut",
+                data: {
+                    labels: entries.map((entry) => entry.label),
+                    datasets: [
+                        {
+                            data: entries.map((entry) => entry.count),
+                            backgroundColor: entries.map((entry) => entry.color),
+                            borderColor: "#0d1b2a",
+                            borderWidth: 2,
+                            hoverOffset: 6
+                        }
+                    ]
+                },
+                options: {
+                    cutout: "62%",
+                    plugins: {
+                        legend: {
+                            position: "bottom",
+                            labels: {
+                                color: "#b9cde6",
+                                boxWidth: 10,
+                                boxHeight: 10,
+                                padding: 14
+                            }
+                        },
+                        noDataText: "Sin datos para segmentar estados."
+                    },
+                    scales: {}
+                }
+            }
+        );
     }
 
     function renderStayBuckets(records) {
@@ -934,34 +1029,218 @@
             }
         }
 
-        els.stayBuckets.innerHTML = "";
+        upsertChart(
+            "stayChart",
+            els.stayChartCanvas,
+            {
+                type: "bar",
+                data: {
+                    labels: buckets.map((bucket) => bucket.label),
+                    datasets: [
+                        {
+                            label: "Visitas",
+                            data: buckets.map((bucket) => bucket.count),
+                            borderRadius: 7,
+                            backgroundColor: ["#4db5ff", "#1fca8d", "#f89f45", "#b389ff", "#ff6b93"]
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        legend: { display: false },
+                        noDataText: "Sin duraciones validas para clasificar estancia."
+                    },
+                    scales: getCommonScales("violet")
+                }
+            }
+        );
+    }
 
-        if (!durations.length) {
-            els.stayBuckets.innerHTML = '<div class="empty-chart">Sin duraciones validas para clasificar estancia.</div>';
+    function upsertChart(key, canvas, config) {
+        if (!canvas || typeof Chart === "undefined") {
             return;
         }
 
-        buckets.forEach((bucket) => {
-            const card = document.createElement("div");
-            card.className = "bucket-item";
+        if (chartInstances[key]) {
+            chartInstances[key].destroy();
+        }
 
-            const range = document.createElement("div");
-            range.className = "bucket-range";
-            range.textContent = bucket.label;
+        const mergedConfig = {
+            ...config,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 550,
+                    easing: "easeOutQuart"
+                },
+                interaction: {
+                    intersect: false,
+                    mode: "index"
+                },
+                plugins: {
+                    tooltip: {
+                        backgroundColor: "rgba(8, 20, 33, 0.96)",
+                        borderColor: "rgba(77, 181, 255, 0.4)",
+                        borderWidth: 1,
+                        titleColor: "#d7ebff",
+                        bodyColor: "#b4cae3",
+                        padding: 10,
+                        callbacks: {
+                            label: (context) => {
+                                const value = getTooltipNumericValue(context);
+                                return context.dataset.label
+                                    ? context.dataset.label + ": " + numberFormatter.format(value)
+                                    : numberFormatter.format(value);
+                            },
+                            afterLabel: (context) => {
+                                const values = getDatasetNumericValues(context.dataset?.data || []);
+                                if (!values.length) {
+                                    return "";
+                                }
 
-            const count = document.createElement("div");
-            count.className = "bucket-count";
-            count.textContent = numberFormatter.format(bucket.count);
+                                const current = getTooltipNumericValue(context);
+                                const total = values.reduce((sum, value) => sum + value, 0);
+                                const avg = total / values.length;
+                                const share = total > 0 ? (current / total) * 100 : 0;
 
-            const share = document.createElement("div");
-            share.className = "bucket-share";
-            share.textContent = percentFormatter.format((bucket.count / durations.length) * 100) + "%";
+                                let comparison = "sin comparacion";
+                                if (avg > 0) {
+                                    const delta = ((current - avg) / avg) * 100;
+                                    const direction = delta >= 0 ? "por encima" : "por debajo";
+                                    comparison =
+                                        percentFormatter.format(Math.abs(delta)) + "% " + direction + " del promedio";
+                                }
 
-            card.appendChild(range);
-            card.appendChild(count);
-            card.appendChild(share);
-            els.stayBuckets.appendChild(card);
-        });
+                                return [
+                                    percentFormatter.format(share) + "% del total",
+                                    comparison
+                                ];
+                            }
+                        }
+                    },
+                    ...config.options?.plugins,
+                    legend: {
+                        labels: {
+                            color: "#b9cde6"
+                        },
+                        ...config.options?.plugins?.legend
+                    }
+                },
+                ...config.options
+            },
+            plugins: [getNoDataPlugin()]
+        };
+
+        chartInstances[key] = new Chart(canvas.getContext("2d"), mergedConfig);
+    }
+
+    function getCommonScales() {
+        return getCommonScales("blue");
+    }
+
+    function getCommonScales(theme) {
+        const palette = {
+            blue: {
+                tick: "#8fb0d1",
+                grid: "rgba(130, 162, 198, 0.12)",
+                border: "rgba(130, 162, 198, 0.26)"
+            },
+            cyan: {
+                tick: "#8ec7db",
+                grid: "rgba(109, 199, 227, 0.12)",
+                border: "rgba(109, 199, 227, 0.28)"
+            },
+            teal: {
+                tick: "#83cec2",
+                grid: "rgba(79, 188, 170, 0.12)",
+                border: "rgba(79, 188, 170, 0.25)"
+            },
+            violet: {
+                tick: "#b5a8e3",
+                grid: "rgba(168, 137, 240, 0.12)",
+                border: "rgba(168, 137, 240, 0.25)"
+            }
+        };
+
+        const selected = palette[theme] || palette.blue;
+
+        return {
+            x: {
+                ticks: { color: selected.tick, maxRotation: 0 },
+                grid: { color: selected.grid },
+                border: { color: selected.border }
+            },
+            y: {
+                beginAtZero: true,
+                ticks: { color: selected.tick },
+                grid: { color: selected.grid },
+                border: { color: selected.border }
+            }
+        };
+    }
+
+    function getTooltipNumericValue(context) {
+        if (typeof context?.parsed === "number") {
+            return Number(context.parsed) || 0;
+        }
+
+        if (context?.parsed && typeof context.parsed.y === "number") {
+            return Number(context.parsed.y) || 0;
+        }
+
+        return Number(context?.raw) || 0;
+    }
+
+    function getDatasetNumericValues(values) {
+        return values
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value >= 0);
+    }
+
+    function getLineAreaGradient(context) {
+        const chart = context.chart;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) {
+            return "rgba(113, 210, 255, 0.28)";
+        }
+
+        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        gradient.addColorStop(0, "rgba(113, 210, 255, 0.45)");
+        gradient.addColorStop(1, "rgba(113, 210, 255, 0.03)");
+        return gradient;
+    }
+
+    function getNoDataPlugin() {
+        return {
+            id: "noDataTextPlugin",
+            afterDraw(chart) {
+                const hasData = chart.data.datasets.some((dataset) =>
+                    Array.isArray(dataset.data) && dataset.data.some((value) => Number(value) > 0)
+                );
+
+                if (hasData) {
+                    return;
+                }
+
+                const { ctx, chartArea } = chart;
+                if (!chartArea) {
+                    return;
+                }
+
+                ctx.save();
+                ctx.fillStyle = "#95acc9";
+                ctx.font = "12px Manrope, sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(
+                    chart.options?.plugins?.noDataText || "Sin datos para graficar.",
+                    (chartArea.left + chartArea.right) / 2,
+                    (chartArea.top + chartArea.bottom) / 2
+                );
+                ctx.restore();
+            }
+        };
     }
 
     function renderTable(records) {
