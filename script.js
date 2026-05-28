@@ -442,11 +442,11 @@
     }
 
     function buildRecord(row) {
-        const marcaTemporalRaw = row.marca_temporal || "";
-        const fechaRaw = row.fecha || extractDate(marcaTemporalRaw);
+        const marcaTemporalRaw = getRowValue(row, ["marca_temporal", "marca_de_tiempo", "timestamp"]) || "";
+        const fechaRaw = getRowValue(row, ["fecha"]) || extractDate(marcaTemporalRaw);
         const fechaDate = parseDateStringToDate(fechaRaw);
-        const ingresoRaw = row.hora_de_ingreso || "";
-        const salidaRaw = row.hora_de_salida || "";
+        const ingresoRaw = getRowValue(row, ["hora_de_ingreso", "ingreso", "hora_ingreso"]) || "";
+        const salidaRaw = getRowValue(row, ["hora_de_salida", "salida", "hora_salida"]) || "";
 
         const marcaTemporal = parseDateTimeFlexible(marcaTemporalRaw);
         const ingresoDate = combineDateAndTime(fechaRaw, ingresoRaw);
@@ -457,8 +457,7 @@
             salidaDate.setDate(salidaDate.getDate() + 1);
         }
 
-        const estanciaDays = parseLocaleNumber(row.estancia);
-        const estanciaFromSheetMinutes = Number.isFinite(estanciaDays) ? estanciaDays * 24 * 60 : NaN;
+        const estanciaFromSheetMinutes = parseStayMinutes(getRowValue(row, ["estancia", "duracion", "duracion_total"]));
 
         return {
             marcaTemporalRaw,
@@ -466,14 +465,27 @@
             fechaDate,
             ingresoRaw,
             salidaRaw,
-            nombre: row.nombre || "Sin nombre",
-            area: row.area_a_visitar || "Sin area",
-            estado: (row.estado || "SIN ESTADO").toUpperCase(),
+            nombre: getRowValue(row, ["nombre", "visitante", "persona"]) || "Sin nombre",
+            area: getRowValue(row, ["area_a_visitar", "area", "area_destino"]) || "Sin area",
+            estado: (getRowValue(row, ["estado"]) || "SIN ESTADO").toUpperCase(),
             ingresoDate,
             salidaDate,
             marcaTemporal,
             estanciaFromSheetMinutes
         };
+    }
+
+    function getRowValue(row, keys) {
+        for (const key of keys) {
+            const value = row[key];
+            if (value !== undefined && value !== null) {
+                const text = String(value).trim();
+                if (text) {
+                    return text;
+                }
+            }
+        }
+        return "";
     }
 
     function parseDateTimeFlexible(value) {
@@ -561,6 +573,27 @@
 
         const numericValue = Number(normalized);
         return Number.isFinite(numericValue) ? numericValue : NaN;
+    }
+
+    function parseStayMinutes(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return NaN;
+        }
+
+        const durationMatch = text.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);
+        if (durationMatch) {
+            const hours = Number(durationMatch[1]);
+            const minutes = Number(durationMatch[2]);
+            const seconds = Number(durationMatch[3] || 0);
+
+            if (Number.isFinite(hours) && Number.isFinite(minutes) && Number.isFinite(seconds)) {
+                return hours * 60 + minutes + seconds / 60;
+            }
+        }
+
+        const estanciaDays = parseLocaleNumber(text);
+        return Number.isFinite(estanciaDays) ? estanciaDays * 24 * 60 : NaN;
     }
 
     function extractDate(value) {
