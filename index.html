@@ -18,10 +18,9 @@
             <div class="live-pill">SISTEMA EN LINEA</div>
         </header>
 
-        <section class="control-strip">
-            <div class="control-item filter-controls">
-                <div class="control-label">Filtro por fechas</div>
-                <div class="date-range-grid">
+        <section class="compact-controls card">
+            <div class="compact-controls-row">
+                <div class="date-range-grid compact-date-grid">
                     <div class="field-group">
                         <label for="startDateInput">Desde</label>
                         <input id="startDateInput" type="date" aria-label="Fecha inicial">
@@ -31,33 +30,8 @@
                         <input id="endDateInput" type="date" aria-label="Fecha final">
                     </div>
                 </div>
-                <div class="inline-controls">
-                    <button id="applyFilterButton" class="button-soft" type="button">Buscar</button>
-                    <button id="clearFilterButton" class="button-soft" type="button">Limpiar</button>
-                </div>
-                <div class="quick-filters">
-                    <button id="quickTodayButton" class="button-soft" type="button">Hoy</button>
-                    <button id="quickTodayTomorrowButton" class="button-soft" type="button">Hoy + manana</button>
-                    <button id="quickAllButton" class="button-soft" type="button">Todo</button>
-                </div>
-                <div class="meta-line">
+                <div class="meta-stack">
                     <span id="filterInfo">Filtro: todas las fechas</span>
-                </div>
-            </div>
-
-            <div class="control-item refresh-controls">
-                <label for="refreshSelect">Actualizacion automatica</label>
-                <div class="inline-controls">
-                    <select id="refreshSelect" aria-label="Frecuencia de actualizacion">
-                        <option value="15">Cada 15 segundos</option>
-                        <option value="30" selected>Cada 30 segundos</option>
-                        <option value="60">Cada 60 segundos</option>
-                        <option value="300">Cada 5 minutos</option>
-                        <option value="0">Pausada</option>
-                    </select>
-                    <button id="refreshButton" type="button">Actualizar ahora</button>
-                </div>
-                <div class="meta-line">
                     <span id="sourceStatus">Estado: esperando datos</span>
                     <span id="lastUpdate">Ultima actualizacion: -</span>
                 </div>
@@ -90,6 +64,24 @@
                 <div class="kpi-value kpi-green" id="effectiveness">-</div>
                 <div class="kpi-sub" id="effectivenessSub">Sin datos todavia</div>
             </article>
+
+            <article class="kpi-card">
+                <div class="kpi-title">Atendidos</div>
+                <div class="kpi-value kpi-blue" id="attendedCount">-</div>
+                <div class="kpi-sub" id="attendedSub">Sin datos todavia</div>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-title">No atendidos</div>
+                <div class="kpi-value kpi-amber" id="notAttendedCount">-</div>
+                <div class="kpi-sub" id="notAttendedSub">Sin datos todavia</div>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-title">Hora pico de ingresos</div>
+                <div class="kpi-value kpi-blue" id="peakHour">-</div>
+                <div class="kpi-sub" id="peakHourSub">Sin datos todavia</div>
+            </article>
         </section>
 
         <section class="charts-grid">
@@ -101,6 +93,23 @@
             <article class="card">
                 <h2>Distribucion de ingresos por hora</h2>
                 <div id="hourBars" class="hour-bars"></div>
+            </article>
+        </section>
+
+        <section class="charts-grid extra-analytics-grid">
+            <article class="card">
+                <h2>Registros por dia</h2>
+                <div id="dayBars" class="bar-list"></div>
+            </article>
+
+            <article class="card">
+                <h2>Estados de atencion</h2>
+                <div id="statusBars" class="bar-list"></div>
+            </article>
+
+            <article class="card">
+                <h2>Rangos de estancia</h2>
+                <div id="stayBuckets" class="stay-buckets"></div>
             </article>
         </section>
 

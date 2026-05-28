@@ -1,6 +1,7 @@
 
 (() => {
     const DATA_URL = "https://docs.google.com/spreadsheets/d/1xKP59tAdxd8t_V-RUeMsjsnahzbcaQlNrzi3Hm2h0Zg/export?format=csv&gid=1909276998";
+    const AUTO_REFRESH_SECONDS = 30;
     const DEFAULT_PAGE_SIZE = 12;
     const AREA_COLORS = ["#4db5ff", "#1fca8d", "#f89f45", "#b389ff", "#ff6b93", "#e6d04b", "#78e2de"];
 
@@ -34,15 +35,8 @@
     });
 
     const els = {
-        refreshSelect: document.getElementById("refreshSelect"),
-        refreshButton: document.getElementById("refreshButton"),
         startDateInput: document.getElementById("startDateInput"),
         endDateInput: document.getElementById("endDateInput"),
-        applyFilterButton: document.getElementById("applyFilterButton"),
-        clearFilterButton: document.getElementById("clearFilterButton"),
-        quickTodayButton: document.getElementById("quickTodayButton"),
-        quickTodayTomorrowButton: document.getElementById("quickTodayTomorrowButton"),
-        quickAllButton: document.getElementById("quickAllButton"),
         filterInfo: document.getElementById("filterInfo"),
         sourceStatus: document.getElementById("sourceStatus"),
         lastUpdate: document.getElementById("lastUpdate"),
@@ -56,8 +50,17 @@
         avgStaySub: document.getElementById("avgStaySub"),
         effectiveness: document.getElementById("effectiveness"),
         effectivenessSub: document.getElementById("effectivenessSub"),
+        attendedCount: document.getElementById("attendedCount"),
+        attendedSub: document.getElementById("attendedSub"),
+        notAttendedCount: document.getElementById("notAttendedCount"),
+        notAttendedSub: document.getElementById("notAttendedSub"),
+        peakHour: document.getElementById("peakHour"),
+        peakHourSub: document.getElementById("peakHourSub"),
         areaBars: document.getElementById("areaBars"),
         hourBars: document.getElementById("hourBars"),
+        dayBars: document.getElementById("dayBars"),
+        statusBars: document.getElementById("statusBars"),
+        stayBuckets: document.getElementById("stayBuckets"),
         tableMeta: document.getElementById("tableMeta"),
         recordsBody: document.getElementById("recordsBody"),
         tableSearchInput: document.getElementById("tableSearchInput"),
@@ -73,40 +76,17 @@
     init();
 
     function init() {
-        els.refreshButton.addEventListener("click", () => {
-            loadAndRender("manual");
-        });
-
-        els.refreshSelect.addEventListener("change", () => {
-            restartAutoRefresh();
-        });
-
-        els.applyFilterButton.addEventListener("click", () => {
+        const handleDateChange = () => {
             applyFiltersAndRender({ resetPage: true });
-        });
+        };
 
-        els.clearFilterButton.addEventListener("click", () => {
-            setDateRangeInputs(null, null);
-            applyFiltersAndRender({ resetPage: true });
-        });
-
-        els.quickTodayButton.addEventListener("click", () => {
-            const today = getTodayDateOnly();
-            setDateRangeInputs(today, today);
-            applyFiltersAndRender({ resetPage: true });
-        });
-
-        els.quickTodayTomorrowButton.addEventListener("click", () => {
-            const today = getTodayDateOnly();
-            const tomorrow = new Date(today.getTime());
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            setDateRangeInputs(today, tomorrow);
-            applyFiltersAndRender({ resetPage: true });
-        });
-
-        els.quickAllButton.addEventListener("click", () => {
-            setDateRangeInputs(null, null);
-            applyFiltersAndRender({ resetPage: true });
+        ["change", "input"].forEach((eventName) => {
+            if (els.startDateInput) {
+                els.startDateInput.addEventListener(eventName, handleDateChange);
+            }
+            if (els.endDateInput) {
+                els.endDateInput.addEventListener(eventName, handleDateChange);
+            }
         });
 
         els.tableSearchInput.addEventListener("input", () => {
@@ -149,11 +129,10 @@
             refreshTimer = null;
         }
 
-        const seconds = Number(els.refreshSelect.value);
-        if (seconds > 0) {
+        if (AUTO_REFRESH_SECONDS > 0) {
             refreshTimer = setInterval(() => {
                 loadAndRender("auto");
-            }, seconds * 1000);
+            }, AUTO_REFRESH_SECONDS * 1000);
         }
     }
 
@@ -607,6 +586,9 @@
         renderKpis(records);
         renderAreaChart(records);
         renderHourChart(records);
+        renderDailyChart(records);
+        renderStatusChart(records);
+        renderStayBuckets(records);
         renderTable(records);
     }
 
@@ -646,6 +628,7 @@
         const notAttended = records.filter((record) => record.estado.includes("NO ATENDIDO")).length;
 
         const effectiveness = total ? (attended / total) * 100 : 0;
+        const peakHourData = getPeakHourData(records);
 
         const stayDurations = records
             .map((record) => getStayMinutes(record, now))
@@ -668,6 +651,52 @@
         els.effectiveness.textContent = total ? percentFormatter.format(effectiveness) + "%" : "0%";
         els.effectivenessSub.textContent =
             numberFormatter.format(notAttended) + " sin atencion de " + numberFormatter.format(total);
+
+        els.attendedCount.textContent = numberFormatter.format(attended);
+        els.attendedSub.textContent = total
+            ? percentFormatter.format((attended / total) * 100) + "% del total"
+            : "0% del total";
+
+        els.notAttendedCount.textContent = numberFormatter.format(notAttended);
+        els.notAttendedSub.textContent = total
+            ? percentFormatter.format((notAttended / total) * 100) + "% del total"
+            : "0% del total";
+
+        els.peakHour.textContent = peakHourData.label;
+        els.peakHourSub.textContent = peakHourData.count
+            ? numberFormatter.format(peakHourData.count) + " ingresos en esa hora"
+            : "Sin ingresos con hora valida";
+    }
+
+    function getPeakHourData(records) {
+        const hourMap = new Map();
+        for (const record of records) {
+            if (!record.ingresoDate) {
+                continue;
+            }
+
+            const hour = record.ingresoDate.getHours();
+            hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
+        }
+
+        let peakHour = null;
+        let peakCount = 0;
+
+        for (const [hour, count] of hourMap.entries()) {
+            if (count > peakCount) {
+                peakHour = hour;
+                peakCount = count;
+            }
+        }
+
+        if (peakHour === null) {
+            return { label: "--", count: 0 };
+        }
+
+        return {
+            label: String(peakHour).padStart(2, "0") + ":00",
+            count: peakCount
+        };
     }
 
     function renderAreaChart(records) {
@@ -766,6 +795,172 @@
             col.appendChild(pillarWrap);
             col.appendChild(label);
             els.hourBars.appendChild(col);
+        });
+    }
+
+    function renderDailyChart(records) {
+        const dateMap = new Map();
+        for (const record of records) {
+            const dateText = record.fechaRaw || "";
+            if (!dateText) {
+                continue;
+            }
+
+            dateMap.set(dateText, (dateMap.get(dateText) || 0) + 1);
+        }
+
+        const entries = Array.from(dateMap.entries()).sort((a, b) => compareDateStrings(a[0], b[0]));
+        els.dayBars.innerHTML = "";
+
+        if (!entries.length) {
+            els.dayBars.innerHTML = '<div class="empty-chart">Sin fechas validas para construir el trend diario.</div>';
+            return;
+        }
+
+        const maxValue = Math.max(...entries.map((entry) => entry[1]));
+        const total = records.length || 1;
+
+        entries.forEach((entry, index) => {
+            const dateText = entry[0];
+            const count = entry[1];
+            const percent = (count / total) * 100;
+
+            const row = document.createElement("div");
+            row.className = "bar-row";
+
+            const label = document.createElement("span");
+            label.className = "bar-label";
+            label.textContent = dateText;
+
+            const track = document.createElement("div");
+            track.className = "bar-track";
+
+            const fill = document.createElement("div");
+            fill.className = "bar-fill";
+            fill.style.width = ((count / maxValue) * 100).toFixed(1) + "%";
+            fill.style.background = AREA_COLORS[index % AREA_COLORS.length];
+            track.appendChild(fill);
+
+            const value = document.createElement("span");
+            value.className = "bar-value";
+            value.textContent = numberFormatter.format(count) + " | " + percentFormatter.format(percent) + "%";
+
+            row.appendChild(label);
+            row.appendChild(track);
+            row.appendChild(value);
+            els.dayBars.appendChild(row);
+        });
+    }
+
+    function renderStatusChart(records) {
+        const totals = {
+            atendido: 0,
+            noAtendido: 0,
+            otro: 0
+        };
+
+        for (const record of records) {
+            const status = String(record.estado || "").toUpperCase();
+            if (status.includes("NO ATENDIDO")) {
+                totals.noAtendido += 1;
+            } else if (status.includes("ATENDIDO")) {
+                totals.atendido += 1;
+            } else {
+                totals.otro += 1;
+            }
+        }
+
+        const entries = [
+            { label: "ATENDIDO", count: totals.atendido, color: "#1fca8d" },
+            { label: "NO ATENDIDO", count: totals.noAtendido, color: "#ff5b67" },
+            { label: "OTRO", count: totals.otro, color: "#f6b35d" }
+        ];
+
+        els.statusBars.innerHTML = "";
+        const total = records.length;
+        if (!total) {
+            els.statusBars.innerHTML = '<div class="empty-chart">Sin datos para segmentar estados.</div>';
+            return;
+        }
+
+        entries.forEach((entry) => {
+            const row = document.createElement("div");
+            row.className = "bar-row";
+
+            const label = document.createElement("span");
+            label.className = "bar-label";
+            label.textContent = entry.label;
+
+            const track = document.createElement("div");
+            track.className = "bar-track";
+
+            const fill = document.createElement("div");
+            fill.className = "bar-fill";
+            fill.style.width = ((entry.count / total) * 100).toFixed(1) + "%";
+            fill.style.background = entry.color;
+            track.appendChild(fill);
+
+            const value = document.createElement("span");
+            value.className = "bar-value";
+            value.textContent = numberFormatter.format(entry.count) + " | " + percentFormatter.format((entry.count / total) * 100) + "%";
+
+            row.appendChild(label);
+            row.appendChild(track);
+            row.appendChild(value);
+            els.statusBars.appendChild(row);
+        });
+    }
+
+    function renderStayBuckets(records) {
+        const now = new Date();
+        const buckets = [
+            { label: "0-30 min", min: 0, max: 30, count: 0 },
+            { label: "30-60 min", min: 30, max: 60, count: 0 },
+            { label: "1-2 h", min: 60, max: 120, count: 0 },
+            { label: "2-4 h", min: 120, max: 240, count: 0 },
+            { label: "4+ h", min: 240, max: Infinity, count: 0 }
+        ];
+
+        const durations = records
+            .map((record) => getStayMinutes(record, now))
+            .filter((minutes) => Number.isFinite(minutes) && minutes > 0);
+
+        for (const duration of durations) {
+            for (const bucket of buckets) {
+                if (duration >= bucket.min && duration < bucket.max) {
+                    bucket.count += 1;
+                    break;
+                }
+            }
+        }
+
+        els.stayBuckets.innerHTML = "";
+
+        if (!durations.length) {
+            els.stayBuckets.innerHTML = '<div class="empty-chart">Sin duraciones validas para clasificar estancia.</div>';
+            return;
+        }
+
+        buckets.forEach((bucket) => {
+            const card = document.createElement("div");
+            card.className = "bucket-item";
+
+            const range = document.createElement("div");
+            range.className = "bucket-range";
+            range.textContent = bucket.label;
+
+            const count = document.createElement("div");
+            count.className = "bucket-count";
+            count.textContent = numberFormatter.format(bucket.count);
+
+            const share = document.createElement("div");
+            share.className = "bucket-share";
+            share.textContent = percentFormatter.format((bucket.count / durations.length) * 100) + "%";
+
+            card.appendChild(range);
+            card.appendChild(count);
+            card.appendChild(share);
+            els.stayBuckets.appendChild(card);
         });
     }
 
@@ -962,7 +1157,9 @@
     }
 
     function setStatus(text) {
-        els.sourceStatus.textContent = text;
+        if (els.sourceStatus) {
+            els.sourceStatus.textContent = text;
+        }
     }
 
     function setLoading(isLoading, trigger) {
@@ -970,8 +1167,6 @@
             let subtitle = "Sincronizando datos mas recientes...";
             if (trigger === "initial") {
                 subtitle = "Cargando primera vista del dashboard...";
-            } else if (trigger === "manual") {
-                subtitle = "Procesando actualizacion manual...";
             }
 
             els.loadingTitle.textContent = "Actualizando dashboard";
@@ -983,16 +1178,18 @@
         els.loadingOverlay.setAttribute("aria-busy", isLoading ? "true" : "false");
 
         const controlsToLock = [
-            els.refreshButton,
-            els.applyFilterButton,
-            els.clearFilterButton,
-            els.quickTodayButton,
-            els.quickTodayTomorrowButton,
-            els.quickAllButton
+            els.startDateInput,
+            els.endDateInput,
+            els.tableSearchInput,
+            els.pageSizeSelect,
+            els.prevPageButton,
+            els.nextPageButton
         ];
 
         controlsToLock.forEach((control) => {
-            control.disabled = isLoading;
+            if (control) {
+                control.disabled = isLoading;
+            }
         });
     }
 
